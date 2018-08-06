@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import seaborn as sns; sns.set()
 
 #The Following is data on crime from the british government website www.gov.uk .
 #Find the Data here, URL:
@@ -18,39 +19,41 @@ crime = crime.drop('HO code',axis=0)
 crime = crime.dropna(axis=1,how='all')
 crime = crime.dropna(axis=0,how='all')
 #DataFrames Population England, index-time
-print (crime.columns.values)
-#region 
-#popul = pd.read_excel(data2,index_col=1,skipfooter=4)
-#popul = popul.dropna(axis=0,how='all')*1000.0 #raw data per 1000 inhabs
-#homicide = crime[crime.columns.values[0]]
-#homicide.index = map(lambda x: str(x),homicide.index)
-#popul.index = map(lambda x: str(x).strip('cu'),popul.index)
-#remove duplicates for reindexing
-#popul2 = popul[~popul.index.duplicated()]
-#popul2 = popul2.reindex(homicide.index)
-#popul2 = popul2[popul2.columns.values[0]]
-#percap
-#percap = homicide/popul2
-#percap = percap.loc[:'1994']
-#percap.index = map(lambda x: int(x),percap.index)
-#total crime
-#totcrime = crime[crime.columns.values[-1]]
-#totcrime.index = map(lambda x: str(x),totcrime.index)
-#totpercap = totcrime/popul2
-#totpercap = totpercap.loc[:'1994']
-#totpercap.index = map(lambda x:int(x),totpercap.index)
-#endangering life crime
-#endcrime = crime[crime.columns.values[6]]
-#endcrime.index = map(lambda x: str(x),endcrime.index)
-#endpercap = endcrime/popul2
-#endpercap = endpercap.loc[:'1994']#.apply(lambda x: np.log(x))
-#endpercap.index = map(lambda x:int(x),endpercap.index)
-#print (endpercap)
-#print (percap)
-#percap.plot(kind='hist',use_index = True)#,x='year',y='homicides per capita')
-#plt.plot(percap.index.values, percap*1000)
-#plt.plot(totpercap.index.values, totpercap*1000)
-#plt.plot(endpercap.index.values, endpercap)
-#plt.xticks(rotation=90)
-#plt.show()
-#endregion
+popeng = pd.read_excel(pengla,index_col=0, skiprows=2, skipfooter=6, header=0, converters={'Pop.': lambda x: float(str(x).replace('.','').replace(',',''))})
+popeng = popeng.drop(columns=popeng.columns.values[1])
+popwal = pd.read_excel(pwales,index_col=0, skiprows=2, skipfooter=6, header=0, converters={'Pop.': lambda x: float(str(x).replace('.','').replace(',',''))})
+popwal = popwal.drop(columns=popwal.columns.values[1])
+#reindex and impute missing values by polinomial interpolation
+#cdex = np.unique(np.vectorize(lambda x: str(x)[:4])(crime.index.values))
+pdex = range(int(popeng.index.values[0]),int(popeng.index.values[-1])+1)
+peng = popeng.reindex(pdex).interpolate(method = 'polynomial', order = 3)
+pwal = popwal.reindex(pdex).interpolate(method = 'polynomial', order = 3)
+ptot = peng.add(pwal)[peng.columns.values[0]]
+ptot.index = map(lambda x: int(x),ptot.index)
+#split up crime data old/new rules application
+cro = crime.loc[:'1998/9 (old rules)',:]
+crn = crime.loc['1998/9 (new rules)59':,:]
+#for now we focus on the old rules
+#TODO: add data for newer dates
+cro = cro.drop([cro.index.values[-2]])
+cro.index = np.unique(np.vectorize(lambda x: str(x)[:4])(cro.index.values)).astype(int)
+#homicide
+homic = cro[cro.columns.values[0]].interpolate(method = 'polynomial', order=1).ffill().bfill()
+attem = cro[cro.columns.values[1]].interpolate(method = 'polynomial', order=1).ffill().bfill()
+endal = cro[cro.columns.values[6]].interpolate(method = 'polynomial', order=1).ffill().bfill()
+#percapita
+hpc = homic/ptot[homic.index.values]
+apc = attem/ptot[homic.index.values]
+epc = endal/ptot[homic.index.values]
+spc = hpc.add(epc.add(apc))
+#plot the results
+plt.plot(np.asarray(spc.index),np.asarray(hpc),label = 'Homicide')
+plt.plot(np.asarray(spc.index),np.asarray(apc),label = 'Attempted Murder')
+plt.plot(np.asarray(spc.index),np.asarray(epc),label = 'Serious Wounding Endangering Life')
+plt.plot(np.asarray(spc.index),np.asarray(spc),label = 'SUM')
+plt.xlabel('Year')
+plt.ylabel('Per Capita')
+plt.legend()
+plt.show()
+
+
